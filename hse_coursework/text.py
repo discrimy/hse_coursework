@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from hse_coursework.schemas import DialogSchema
 
+
 class ReplicaWithChannelSchema(BaseModel):
     """Реплика с привязкой к каналу, по которому её сказали"""
 
@@ -22,7 +23,9 @@ class DialogWithChannelsSchema(BaseModel):
     dialog: List[ReplicaWithChannelSchema]
 
 
-def merge_dialogs(channel_to_dialog: Dict[str, DialogSchema]) -> DialogWithChannelsSchema:
+def merge_dialogs(
+    channel_to_dialog: Dict[str, DialogSchema],
+) -> DialogWithChannelsSchema:
     """Склеить диалоги в один диалог с привязкой по времени. Диалог будет отсортировать по времени начала реплики"""
     replicas_with_channels = [
         ReplicaWithChannelSchema(**replica.model_dump(), channel=channel)
@@ -39,13 +42,17 @@ def merge_dialogs(channel_to_dialog: Dict[str, DialogSchema]) -> DialogWithChann
 
 def dialog_to_text(replicas: List[ReplicaWithChannelSchema]) -> str:
     """Преобразует склеенный диалог в сплошной текст (нужен для распознавания записи)"""
-    return ' '.join(replica.text for replica in replicas)
+    return " ".join(replica.text for replica in replicas)
 
 
-def _group_replicas_by_channel(replicas: List[ReplicaWithChannelSchema]) -> Iterator[ReplicaWithChannelSchema]:
+def _group_replicas_by_channel(
+    replicas: List[ReplicaWithChannelSchema],
+) -> Iterator[ReplicaWithChannelSchema]:
     # itertools.groupby группирует **соседние** элементы с совпадающим ключом, что нам и надо
     # пример: 1 1 1 2 1 1 2 2 -> [1, 1, 1] [2] [1, 1] [2, 2]
-    for channel, replicas_group_iter in itertools.groupby(replicas, key=lambda r: r.channel):
+    for channel, replicas_group_iter in itertools.groupby(
+        replicas, key=lambda r: r.channel
+    ):
         replicas_group = list(replicas_group_iter)
         yield ReplicaWithChannelSchema(
             text=dialog_to_text(replicas_group),
@@ -59,7 +66,7 @@ def _group_replicas_within_channel_by_sentences(
     replicas: List[ReplicaWithChannelSchema],
 ) -> Iterator[ReplicaWithChannelSchema]:
     text = dialog_to_text(replicas)
-    sentences = nltk.tokenize.sent_tokenize(text, language='russian')
+    sentences = nltk.tokenize.sent_tokenize(text, language="russian")
 
     buffer = []
     sentence_index = 0
@@ -85,7 +92,9 @@ def _group_replicas_within_channel_by_sentences(
         )
 
 
-def _prettify_replicas(replicas: List[ReplicaWithChannelSchema]) -> List[ReplicaWithChannelSchema]:
+def _prettify_replicas(
+    replicas: List[ReplicaWithChannelSchema],
+) -> List[ReplicaWithChannelSchema]:
     # Объединяем слова в отдельные предложения
     channels = {r.channel for r in replicas}
     grouped_by_sentences = [
@@ -96,7 +105,9 @@ def _prettify_replicas(replicas: List[ReplicaWithChannelSchema]) -> List[Replica
         )
     ]
     # Объединяем соседние предложения от одного канала
-    grouped_by_sentences = sorted(grouped_by_sentences, key=lambda replica: replica.start)
+    grouped_by_sentences = sorted(
+        grouped_by_sentences, key=lambda replica: replica.start
+    )
     # grouped_by_channel = list(_group_replicas_by_channel(grouped_by_sentences))
     grouped_by_channel = grouped_by_sentences
     return grouped_by_channel

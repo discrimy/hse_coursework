@@ -8,14 +8,12 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.11"
 whisperx = {git = "https://github.com/m-bain/whisperX", rev = "f2da2f858e99e4211fe4f64b5f2938b007827e17"}
-#torch = {url = "https://download.pytorch.org/whl/cpu-cxx11-abi/torch-2.3.0%2Bcpu.cxx11.abi-cp311-cp311-linux_x86_64.whl#sha256=1a841294509f4710931de8d8311de311a116f7bfbeb00fa07d267ec277573086"}
-#torchaudio = {url = "https://download.pytorch.org/whl/cpu/torchaudio-2.3.0%2Bcpu-cp311-cp311-linux_x86_64.whl#sha256=2cbf497e48b5e80c12861d2f1d40ae035eb6c1aabda6264a547e11ee8c6dff60"}
-faster-whisper = "1.0.2"
-transformers = "4.41.1"
+faster-whisper = "1.0.0"
+transformers = "*"
 ffmpeg-python = "^0.2.0"
 nltk = "^3.8.1"
 pandas = "^2.0.3"
-pyannote-audio = {git = "https://github.com/pyannote/pyannote-audio", rev = "f4fad606617aeabea70c3078a851230e35f2d8c6"}
+pyannote-audio = "*"
 pydantic = "^2.7.1"
 torch = "^2.3.0"
 torchaudio = "^2.3.0"

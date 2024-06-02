@@ -1,8 +1,10 @@
+import datetime
 import functools
-import logging
 import string
 from pathlib import Path
 from pprint import pprint
+import sys
+import textwrap
 from typing import Tuple, List
 
 import re
@@ -12,17 +14,20 @@ from transformers import Wav2Vec2ForCTC  # type: ignore
 from whisperx.asr import FasterWhisperPipeline  # type: ignore
 
 from hse_coursework.schemas import ReplicaSchema, DialogSchema
-from hse_coursework.text import prettify_dialog, merge_dialogs
+from hse_coursework.text import DialogWithChannelsSchema, prettify_dialog, merge_dialogs
 from hse_coursework.types import Device
 from hse_coursework.utils.iterators import window
 from hse_coursework.utils.timer import measure_performance
 
 import nltk
-nltk.download('punkt')
+
+nltk.download("punkt")
 
 WhisperxAlignMetadata = dict
 
-DEVICE = Device.CPU
+DEVICE = Device.CUDA
+
+fprint = lambda text: print(text, file=sys.stderr)
 
 
 @functools.lru_cache()
@@ -41,14 +46,14 @@ def get_model() -> Tuple[FasterWhisperPipeline, Wav2Vec2ForCTC, WhisperxAlignMet
             compute_type=compute_type,
             language="ru",
         )
-    print("Loaded whisperx model: %.2fs.", measure.delta)
+    fprint(f"Loaded whisperx model: {measure.delta:.2f}s.")
 
     with measure_performance() as measure:
         model_a, metadata = whisperx.load_align_model(
             language_code="ru",
             device=DEVICE,
         )
-    print("Loaded whisperx align model: %.2fs.", measure.delta)
+    fprint(f"Loaded whisperx align model: {measure.delta:.2f}s.")
 
     return model, model_a, metadata
 
@@ -140,7 +145,7 @@ def process(audio_wav: Path) -> DialogSchema:
         )
         for entry in segments_in["segments"]:
             entry["text"] = clean_text(entry["text"])
-        
+
         segments_in = whisperx.align(
             segments_in["segments"],
             model_a,
@@ -161,14 +166,42 @@ def process(audio_wav: Path) -> DialogSchema:
         dialog = _fill_missing_time_labels(dialog)
         # Округление необходимо для уменьшения кол-во получаемого JSON
         dialog = [_round_time_labels(replica) for replica in dialog]
-    print("Converted for %.2fs.", measure.delta)
+    fprint(f"Converted for {measure.delta:.2f}s.")
 
     return DialogSchema(dialog=dialog)
 
 
-dialog = process(audio_wav=Path('audio_result (mp3cut.net).wav'))
-for line in dialog.dialog:
-    print(f'{line.start} - {line.end}: {line.text}')
-pretty = prettify_dialog(merge_dialogs({'1': dialog}))
-for line in pretty.dialog:
-    print(f'{line.start} - {line.end} ({line.channel}): {line.text}')
+def format_as_srt(dialog: DialogWithChannelsSchema) -> str:
+    result = []
+    for i, replica in enumerate(dialog.dialog, start=1):
+        start_formatted = str(datetime.timedelta(seconds=replica.start))[:-3].replace(
+            ".", ","
+        )
+        end_formatted = str(datetime.timedelta(seconds=replica.end))[:-3].replace(
+            ".", ","
+        )
+        text = textwrap.dedent(f"""
+            {i}
+            {start_formatted} --> {end_formatted}
+            {replica.text}
+        """).strip()
+        if text[0].islower():
+            text = text[0].upper() + text[1:]
+        result.append(text)
+    return "\n\n".join(result)
+
+
+wav_file, srt_file = sys.argv[1:]
+
+
+with measure_performance() as measure:
+    dialog = process(audio_wav=Path(wav_file))
+fprint(f"Audio2text: {measure.delta:.3f}s")
+
+# for line in dialog.dialog:
+#     fprint(f'{line.start} - {line.end}: {line.text}')
+pretty = prettify_dialog(merge_dialogs({"1": dialog}))
+# for line in pretty.dialog:
+#     fprint(f'{line.start} - {line.end} ({line.channel}): {line.text}')
+srt = format_as_srt(pretty)
+Path(srt_file).write_text(srt)
