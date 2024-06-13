@@ -1,6 +1,5 @@
-import base64
 import itertools
-from typing import Dict, Optional, List, Iterator
+from typing import Dict, List, Iterator
 
 import nltk
 from pydantic import BaseModel

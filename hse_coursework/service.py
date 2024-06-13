@@ -1,40 +1,33 @@
-import datetime
 import functools
+import re
 import string
-from pathlib import Path
-from pprint import pprint
 import sys
-import textwrap
+from copy import deepcopy
+from pathlib import Path
 from typing import Tuple, List
 
-import re
-from copy import deepcopy
-import whisperx  # type: ignore
-from transformers import Wav2Vec2ForCTC  # type: ignore
-from whisperx.asr import FasterWhisperPipeline  # type: ignore
+import nltk
+import whisperx
+from transformers import Wav2Vec2ForCTC
+from whisperx.asr import FasterWhisperPipeline
 
 from hse_coursework.schemas import ReplicaSchema, DialogSchema
-from hse_coursework.text import DialogWithChannelsSchema, prettify_dialog, merge_dialogs
-from hse_coursework.types import Device
+from hse_coursework.utils.device import get_device, Device
 from hse_coursework.utils.iterators import window
 from hse_coursework.utils.timer import measure_performance
 
-import nltk
-
-nltk.download("punkt")
-
 WhisperxAlignMetadata = dict
-
-DEVICE = Device.CUDA
-
 fprint = lambda text: print(text, file=sys.stderr)
 
 
 @functools.lru_cache()
 def get_model() -> Tuple[FasterWhisperPipeline, Wav2Vec2ForCTC, WhisperxAlignMetadata]:
     """Загрузить модели для конвертации"""
+    device = get_device()
+    fprint(f"Using device: {device}")
+
     model_size = "large-v2"
-    if DEVICE == Device.CPU:
+    if device == Device.CPU:
         compute_type = "float32"
     else:
         compute_type = "float16"
@@ -42,7 +35,7 @@ def get_model() -> Tuple[FasterWhisperPipeline, Wav2Vec2ForCTC, WhisperxAlignMet
     with measure_performance() as measure:
         model = whisperx.load_model(
             model_size,
-            device=DEVICE,
+            device=device,
             compute_type=compute_type,
             language="ru",
         )
@@ -51,9 +44,12 @@ def get_model() -> Tuple[FasterWhisperPipeline, Wav2Vec2ForCTC, WhisperxAlignMet
     with measure_performance() as measure:
         model_a, metadata = whisperx.load_align_model(
             language_code="ru",
-            device=DEVICE,
+            device=device,
         )
     fprint(f"Loaded whisperx align model: {measure.delta:.2f}s.")
+
+    # Download NLTK model
+    nltk.download("punkt")
 
     return model, model_a, metadata
 
@@ -151,7 +147,7 @@ def process(audio_wav: Path) -> DialogSchema:
             model_a,
             metadata,
             audio_in,
-            device=DEVICE,
+            device=get_device(),
             return_char_alignments=False,
         )
         text_in = segments_in["word_segments"]
@@ -169,39 +165,3 @@ def process(audio_wav: Path) -> DialogSchema:
     fprint(f"Converted for {measure.delta:.2f}s.")
 
     return DialogSchema(dialog=dialog)
-
-
-def format_as_srt(dialog: DialogWithChannelsSchema) -> str:
-    result = []
-    for i, replica in enumerate(dialog.dialog, start=1):
-        start_formatted = str(datetime.timedelta(seconds=replica.start))[:-3].replace(
-            ".", ","
-        )
-        end_formatted = str(datetime.timedelta(seconds=replica.end))[:-3].replace(
-            ".", ","
-        )
-        text = textwrap.dedent(f"""
-            {i}
-            {start_formatted} --> {end_formatted}
-            {replica.text}
-        """).strip()
-        if text[0].islower():
-            text = text[0].upper() + text[1:]
-        result.append(text)
-    return "\n\n".join(result)
-
-
-wav_file, srt_file = sys.argv[1:]
-
-
-with measure_performance() as measure:
-    dialog = process(audio_wav=Path(wav_file))
-fprint(f"Audio2text: {measure.delta:.3f}s")
-
-# for line in dialog.dialog:
-#     fprint(f'{line.start} - {line.end}: {line.text}')
-pretty = prettify_dialog(merge_dialogs({"1": dialog}))
-# for line in pretty.dialog:
-#     fprint(f'{line.start} - {line.end} ({line.channel}): {line.text}')
-srt = format_as_srt(pretty)
-Path(srt_file).write_text(srt)

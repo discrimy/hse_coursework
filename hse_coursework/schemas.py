@@ -1,4 +1,3 @@
-import base64
 from typing import List
 
 from pydantic import BaseModel, validator  # noqa pylint: disable=W0611
